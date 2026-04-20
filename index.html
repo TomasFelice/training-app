@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!-- ── Viewport: NO escalar, sin zoom del usuario ── -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+
+    <!-- ── PWA / iOS Safari ── -->
+    <!-- Oculta la UI de Safari para que parezca app nativa -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="GymTrack" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- ── Theme color (barra de estado en negro) ── -->
+    <meta name="theme-color" content="#000000" />
+    <meta name="msapplication-TileColor" content="#000000" />
+
+    <!-- ── Manifest ── -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- ── Favicons / Touch Icons ── -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- iOS requiere apple-touch-icon — mínimo 180x180 -->
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/icon-167.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png" />
+
+    <!-- ── iOS Splash Screens (iPhone 14 Pro como base) ── -->
+    <link
+      rel="apple-touch-startup-image"
+      href="/splash/splash-1170x2532.png"
+      media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)"
+    />
+    <link
+      rel="apple-touch-startup-image"
+      href="/splash/splash-1179x2556.png"
+      media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)"
+    />
+
+    <!-- ── SEO / Social ── -->
+    <meta name="description" content="Registrá tus entrenamientos, seguí tu progreso y superá tus límites." />
+    <meta name="application-name" content="GymTrack" />
+
+    <!-- ── Formato de números de teléfono: desactivar detección automática ── -->
+    <meta name="format-detection" content="telephone=no" />
+
+    <title>GymTrack</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

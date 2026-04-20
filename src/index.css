@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Apple SF Pro font stack ── */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* ── iOS Dark palette ── */
+  --color-bg-primary:    #000000;
+  --color-bg-secondary:  #1C1C1E;
+  --color-bg-tertiary:   #2C2C2E;
+  --color-bg-grouped:    #1C1C1E;
+
+  --color-label-primary:   #FFFFFF;
+  --color-label-secondary: #8E8E93;
+  --color-label-tertiary:  #48484A;
+
+  --color-accent:        #0A84FF;
+  --color-accent-green:  #30D158;
+  --color-accent-red:    #FF453A;
+  --color-accent-orange: #FF9F0A;
+  --color-accent-purple: #BF5AF2;
+
+  --color-separator:     rgba(84, 84, 88, 0.65);
+  --color-glass:         rgba(28, 28, 30, 0.72);
+
+  /* ── Safe-area aware spacing ── */
+  --spacing-safe-top:    env(safe-area-inset-top, 0px);
+  --spacing-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ── Reset & base ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  height: 100%;
+  overflow: hidden;
+  /* Prevent elastic overscroll on iOS */
+  overscroll-behavior: none;
+}
+
+body {
+  height: 100%;
+  background-color: #000;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+  /* Prevent text size adjust on orientation change */
+  -webkit-text-size-adjust: 100%;
+  user-select: none;
+}
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── iOS-style scrollable regions ── */
+.scroll-ios {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* ── Glass panel utility ── */
+.glass {
+  background: rgba(28, 28, 30, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* ── Active press state (replaces :active) ── */
+.pressable {
+  transition: opacity 0.1s ease, transform 0.1s ease;
+}
+.pressable:active {
+  opacity: 0.6;
+  transform: scale(0.97);
+}
+
+/* ── Recharts label color override ── */
+.recharts-cartesian-axis-tick text {
+  fill: #8E8E93;
+  font-size: 11px;
+}
+.recharts-tooltip-wrapper {
+  outline: none;
+}

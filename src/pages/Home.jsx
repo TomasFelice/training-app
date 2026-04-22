@@ -351,8 +351,8 @@ export default function HomePage() {
                     <div className="flex-1 text-left">
                       <p className="text-white font-semibold text-sm">{r.name}</p>
                       <p className="text-[#8E8E93] text-xs mt-0.5">
-                        {r.exerciseIds?.length ?? 0} ejercicios
-                        {r.days?.length > 0 && ` · ${r.days.join(', ')}`}
+                        {(r.trainingDays ?? []).reduce((a, d) => a + d.exercises.length, 0)} ejercicios
+                        {r.scheduledDays?.length > 0 && ` · ${r.scheduledDays.join(', ')}`}
                       </p>
                     </div>
                     <ChevronRight size={16} className="text-[#48484A]" />

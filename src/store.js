@@ -1,31 +1,54 @@
 import { create } from 'zustand'
 
 // ─── Active Workout Store ───────────────────────────────────────────────────
-// Manages the in-progress training session state (not persisted to IndexedDB
-// until the user finishes the workout)
 
 export const useWorkoutStore = create((set, get) => ({
-  // null when no workout is active
   activeWorkout: null,
 
   // { [exerciseId]: [ { weight, reps, rpe, done } ] }
   sets: {},
 
-  // Rest timer
   restTimer: { running: false, seconds: 0, target: 90 },
 
-  startWorkout: (routine, defaultRestSeconds = 90) =>
-    set((state) => ({
-      activeWorkout: { routineId: routine.id, name: routine.name, startTime: Date.now() },
-      sets: Object.fromEntries((routine.exerciseIds ?? []).map((id) => [id, []])),
+  // Initialise a session from a routine + day index.
+  // Pre-fills sets from the planned exercise config.
+  startWorkout: (routine, dayIndex = 0, defaultRestSeconds = 90) => {
+    const trainingDays = routine.trainingDays ?? []
+    const day = trainingDays[dayIndex] ?? { name: 'Día 1', exercises: [] }
+
+    const initialSets = {}
+    const plannedConfig = {} // { [exerciseId]: { sets, reps } }
+
+    for (const ex of day.exercises) {
+      const count = ex.sets ?? 1
+      initialSets[ex.exerciseId] = Array.from({ length: count }, () => ({
+        weight: ex.weight ?? null,
+        reps: ex.reps ?? null,
+        done: false,
+        rpe: null,
+      }))
+      plannedConfig[ex.exerciseId] = { sets: count, reps: ex.reps }
+    }
+
+    set({
+      activeWorkout: {
+        routineId: routine.id,
+        name: routine.name,
+        dayName: day.name,
+        startTime: Date.now(),
+        dayIndex,
+        plannedConfig,
+      },
+      sets: initialSets,
       restTimer: { running: false, seconds: 0, target: defaultRestSeconds },
-    })),
+    })
+  },
 
   addSet: (exerciseId, setData) =>
     set((state) => ({
       sets: {
         ...state.sets,
-        [exerciseId]: [...(state.sets[exerciseId] ?? []), { ...setData, done: false }],
+        [exerciseId]: [...(state.sets[exerciseId] ?? []), { weight: null, reps: null, done: false, rpe: null, ...setData }],
       },
     })),
 
@@ -43,10 +66,13 @@ export const useWorkoutStore = create((set, get) => ({
       return { sets: { ...state.sets, [exerciseId]: updated } }
     }),
 
-  markSetDone: (exerciseId, index) => {
-    get().updateSet(exerciseId, index, { done: true })
-    get().startRestTimer()
-  },
+  // Mark done without starting the rest timer (timer starts after RPE is handled)
+  markSetDone: (exerciseId, index) =>
+    get().updateSet(exerciseId, index, { done: true }),
+
+  // Toggle a completed set back to pending
+  unmarkSetDone: (exerciseId, index) =>
+    get().updateSet(exerciseId, index, { done: false, rpe: null }),
 
   startRestTimer: (target = get().restTimer.target) =>
     set({ restTimer: { running: true, seconds: 0, target } }),
@@ -54,7 +80,8 @@ export const useWorkoutStore = create((set, get) => ({
   tickRestTimer: () =>
     set((state) => {
       const next = state.restTimer.seconds + 1
-      if (next >= state.restTimer.target) return { restTimer: { ...state.restTimer, running: false, seconds: next } }
+      if (next >= state.restTimer.target)
+        return { restTimer: { ...state.restTimer, running: false, seconds: next } }
       return { restTimer: { ...state.restTimer, seconds: next } }
     }),
 
@@ -64,7 +91,8 @@ export const useWorkoutStore = create((set, get) => ({
   setRestTarget: (target) =>
     set((state) => ({ restTimer: { ...state.restTimer, target } })),
 
-  finishWorkout: () => set({ activeWorkout: null, sets: {}, restTimer: { running: false, seconds: 0, target: 90 } }),
+  finishWorkout: () =>
+    set({ activeWorkout: null, sets: {}, restTimer: { running: false, seconds: 0, target: 90 } }),
 }))
 
 // ─── UI Store ──────────────────────────────────────────────────────────────
@@ -72,14 +100,12 @@ export const useUIStore = create((set) => ({
   activeTab: 'home',
   setActiveTab: (tab) => set({ activeTab: tab }),
 
-  // Bottom sheet / modal state
-  modal: null, // { type: 'routine-form' | 'exercise-picker' | ..., data: any }
+  modal: null,
   openModal: (type, data = null) => set({ modal: { type, data } }),
   closeModal: () => set({ modal: null }),
 }))
 
 // ─── Settings Store ────────────────────────────────────────────────────────
-// Persisted manually to localStorage (no backend)
 const STORAGE_KEY = 'gymtrack_settings'
 
 function loadSettings() {
@@ -99,7 +125,7 @@ function saveSettings(state) {
 
 export const useSettingsStore = create((set, get) => ({
   defaultRestSeconds: 90,
-  weightUnit: 'kg', // 'kg' | 'lb'
+  weightUnit: 'kg',
 
   _hydrated: false,
   hydrate: () => {

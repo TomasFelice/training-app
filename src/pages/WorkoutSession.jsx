@@ -17,45 +17,67 @@ function formatDuration(seconds) {
 
 // ── Exercise Block ─────────────────────────────────────────────────────────
 
-function ExerciseBlock({ exerciseId, workoutSets, prevSets }) {
+function ExerciseBlock({ exerciseId, workoutSets, prevSets, plannedSets }) {
   const [collapsed, setCollapsed] = useState(false)
-  const { addSet, updateSet, removeSet, markSetDone } = useWorkoutStore()
+  const { addSet, updateSet, removeSet, markSetDone, unmarkSetDone, startRestTimer } = useWorkoutStore()
   const [pendingRPE, setPendingRPE] = useState(null) // { setIndex }
 
-  const exercise = useLiveQuery(
-    () => db.exercises.get(exerciseId),
-    [exerciseId]
-  )
+  const exercise = useLiveQuery(() => db.exercises.get(exerciseId), [exerciseId])
 
   const sets = workoutSets ?? []
   const doneSets = sets.filter((s) => s.done).length
+  const allPlannedDone = plannedSets != null && doneSets >= plannedSets && plannedSets > 0
 
   function handleDone(index, setData) {
-    updateSet(exerciseId, index, setData)
-    markSetDone(exerciseId, index)
+    updateSet(exerciseId, index, { ...setData, done: true })
     setPendingRPE({ setIndex: index })
+    // Rest timer starts AFTER RPE is dismissed (see handleRPESelect/handleRPESkip)
   }
 
   function handleRPESelect(rpe) {
     updateSet(exerciseId, pendingRPE.setIndex, { rpe })
     setPendingRPE(null)
+    startRestTimer()
+  }
+
+  function handleRPESkip() {
+    setPendingRPE(null)
+    startRestTimer()
+  }
+
+  function handleUndo(index) {
+    unmarkSetDone(exerciseId, index)
   }
 
   return (
     <>
-      <div className="bg-[#1C1C1E] rounded-2xl overflow-hidden mb-3">
+      <motion.div
+        animate={{
+          borderColor: allPlannedDone ? 'rgba(48,209,88,0.4)' : 'transparent',
+        }}
+        className="rounded-2xl overflow-hidden mb-3 border"
+        style={{ backgroundColor: allPlannedDone ? 'rgba(48,209,88,0.06)' : '#1C1C1E' }}
+      >
         {/* Exercise header */}
         <button
           onClick={() => setCollapsed((c) => !c)}
           className="pressable w-full flex items-center gap-3 px-4 py-3.5"
         >
-          <div className="w-9 h-9 bg-[#0A84FF]/15 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Dumbbell size={16} className="text-[#0A84FF]" />
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            allPlannedDone ? 'bg-[#30D158]/20' : 'bg-[#0A84FF]/15'
+          }`}>
+            {allPlannedDone
+              ? <Check size={16} className="text-[#30D158]" strokeWidth={2.5} />
+              : <Dumbbell size={16} className="text-[#0A84FF]" />
+            }
           </div>
           <div className="flex-1 text-left">
-            <p className="text-white font-semibold text-sm">{exercise?.name ?? '…'}</p>
+            <p className={`font-semibold text-sm ${allPlannedDone ? 'text-[#30D158]' : 'text-white'}`}>
+              {exercise?.name ?? '…'}
+            </p>
             <p className="text-[#8E8E93] text-xs mt-0.5">
               {doneSets}/{sets.length} series
+              {plannedSets != null && ` · ${plannedSets} planificadas`}
               {exercise?.muscleGroup && ` · ${exercise.muscleGroup}`}
             </p>
           </div>
@@ -94,6 +116,7 @@ function ExerciseBlock({ exerciseId, workoutSets, prevSets }) {
                     onUpdate={(data) => updateSet(exerciseId, i, data)}
                     onRemove={() => removeSet(exerciseId, i)}
                     onDone={(data) => handleDone(i, data)}
+                    onUndo={() => handleUndo(i)}
                   />
                 ))}
               </AnimatePresence>
@@ -108,21 +131,21 @@ function ExerciseBlock({ exerciseId, workoutSets, prevSets }) {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </motion.div>
 
-      {/* RPE Selector overlay */}
+      {/* RPE Selector overlay — z-50 so it's above the rest timer */}
       <AnimatePresence>
         {pendingRPE && (
           <>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-black/50"
-              onClick={() => setPendingRPE(null)}
+              className="fixed inset-0 z-[60] bg-black/50"
+              onClick={handleRPESkip}
             />
             <RPESelector
               current={sets[pendingRPE.setIndex]?.rpe}
               onSelect={handleRPESelect}
-              onSkip={() => setPendingRPE(null)}
+              onSkip={handleRPESkip}
             />
           </>
         )}
@@ -182,15 +205,13 @@ export default function WorkoutSession() {
   const { activeWorkout, sets, finishWorkout, stopRestTimer, setRestTarget } = useWorkoutStore()
   const { setActiveTab } = useUIStore()
   const { defaultRestSeconds } = useSettingsStore()
-  const { display, unit } = useWeightUnit()
+  const { display } = useWeightUnit()
   const [elapsed, setElapsed] = useState(0)
   const [showFinish, setShowFinish] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // Sync rest timer target with settings whenever it changes
   useEffect(() => { setRestTarget(defaultRestSeconds) }, [defaultRestSeconds, setRestTarget])
 
-  // Elapsed timer
   useEffect(() => {
     const interval = setInterval(() => {
       setElapsed(Math.floor((Date.now() - (activeWorkout?.startTime ?? Date.now())) / 1000))
@@ -198,12 +219,8 @@ export default function WorkoutSession() {
     return () => clearInterval(interval)
   }, [activeWorkout?.startTime])
 
-  // Fetch exercises for this routine
-  const exerciseIds = activeWorkout
-    ? Object.keys(sets).map(Number)
-    : []
+  const exerciseIds = activeWorkout ? Object.keys(sets).map(Number) : []
 
-  // Previous sets for each exercise (last workout data)
   const [prevSetsMap, setPrevSetsMap] = useState({})
   useEffect(() => {
     async function load() {
@@ -217,7 +234,6 @@ export default function WorkoutSession() {
     if (exerciseIds.length) load()
   }, [exerciseIds.join(',')])
 
-  // Compute totals
   const allSets = Object.values(sets).flat()
   const doneSets = allSets.filter((s) => s.done)
   const totalVolume = doneSets.reduce((acc, s) => acc + (s.weight ?? 0) * (s.reps ?? 0), 0)
@@ -264,6 +280,8 @@ export default function WorkoutSession() {
 
   if (!activeWorkout) return null
 
+  const plannedConfig = activeWorkout.plannedConfig ?? {}
+
   return (
     <div className="flex flex-col h-full bg-black">
       {/* ── Top bar ── */}
@@ -272,7 +290,6 @@ export default function WorkoutSession() {
         style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 16px)', paddingBottom: '12px' }}
       >
         <div className="flex items-center gap-3">
-          {/* Discard */}
           <button
             onClick={handleDiscard}
             className="pressable w-9 h-9 bg-[#2C2C2E] rounded-full flex items-center justify-center"
@@ -280,13 +297,14 @@ export default function WorkoutSession() {
             <X size={16} className="text-[#8E8E93]" />
           </button>
 
-          {/* Title + timer */}
           <div className="flex-1 text-center">
-            <p className="text-white font-semibold text-sm leading-tight">{activeWorkout.name}</p>
+            <p className="text-white font-semibold text-sm leading-tight">
+              {activeWorkout.name}
+              {activeWorkout.dayName ? ` · ${activeWorkout.dayName}` : ''}
+            </p>
             <p className="text-[#0A84FF] text-xs tabular-nums">{formatDuration(elapsed)}</p>
           </div>
 
-          {/* Finish */}
           <button
             onClick={() => setShowFinish(true)}
             className="pressable bg-[#30D158] px-4 py-2 rounded-full text-white text-sm font-semibold"
@@ -327,6 +345,7 @@ export default function WorkoutSession() {
             exerciseId={id}
             workoutSets={sets[id]}
             prevSets={prevSetsMap[id]}
+            plannedSets={plannedConfig[id]?.sets}
           />
         ))}
 
@@ -337,8 +356,8 @@ export default function WorkoutSession() {
         )}
       </div>
 
-      {/* ── Floating rest timer ── */}
-      <RestTimer />
+      {/* ── Rest timer (inside session, lower offset) ── */}
+      <RestTimer offsetBottom="calc(env(safe-area-inset-bottom,0px)+72px)" />
 
       {/* ── Finish modal ── */}
       <AnimatePresence>

@@ -26,7 +26,7 @@ export default function RPESelector({ current, onSelect, onSkip }) {
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: '100%', opacity: 0 }}
       transition={{ type: 'spring', stiffness: 400, damping: 38 }}
-      className="fixed inset-x-0 bottom-0 z-50 bg-[#1C1C1E] rounded-t-3xl px-5 pt-4"
+      className="fixed inset-x-0 bottom-0 z-[61] bg-[#1C1C1E] rounded-t-3xl px-5 pt-4"
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}
     >
       {/* Handle */}

@@ -9,7 +9,7 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function RestTimer() {
+export default function RestTimer({ offsetBottom }) {
   const { restTimer, tickRestTimer, stopRestTimer, setRestTarget } = useWorkoutStore()
   const intervalRef = useRef(null)
 
@@ -39,7 +39,8 @@ export default function RestTimer() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 120, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 420, damping: 38 }}
-          className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+72px)] inset-x-4 z-40"
+          className="fixed inset-x-4 z-40"
+          style={{ bottom: offsetBottom ?? 'calc(env(safe-area-inset-bottom,0px)+72px)' }}
         >
           <div className="glass border border-white/10 rounded-3xl px-5 py-4 flex items-center gap-4 shadow-2xl">
             {/* Progress ring + countdown */}

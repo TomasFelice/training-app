@@ -46,7 +46,11 @@ async function buildContext() {
 
   const lines = [
     '=== CONTEXTO DE ENTRENAMIENTO ===',
-    `Rutinas activas: ${routines.map((r) => `${r.name} (${r.exerciseIds?.length ?? 0} ejercicios, días: ${r.days?.join(', ') ?? '—'})`).join(' | ') || 'ninguna'}`,
+    `Rutinas activas: ${routines.map((r) => {
+      const exCount = (r.trainingDays ?? []).reduce((a, d) => a + d.exercises.length, 0)
+      const days = r.scheduledDays?.join(', ') ?? '—'
+      return `${r.name} (${exCount} ejercicios, días: ${days})`
+    }).join(' | ') || 'ninguna'}`,
     '',
     `Records personales (1RM estimado):`,
     ...Object.values(prMap).map((p) => `  - ${p.name}: ${p.weight}kg × ${p.reps} reps (1RM ~${p.est1rm.toFixed(1)}kg)`),
@@ -126,15 +130,19 @@ export function parseRoutineFromResponse(text) {
 export async function saveRoutineFromAI(parsed) {
   const exerciseNames = parsed.exercises ?? []
 
-  // Match exercise names to existing DB entries (case-insensitive)
   const allExercises = await db.exercises.toArray()
-  const exerciseIds = exerciseNames
+  const matchedIds = exerciseNames
     .map((name) => allExercises.find((e) => e.name.toLowerCase() === name.toLowerCase())?.id)
     .filter(Boolean)
 
   return db.routines.add({
     name: parsed.name,
-    days: parsed.days ?? [],
-    exerciseIds,
+    scheduledDays: parsed.days ?? [],
+    trainingDays: [
+      {
+        name: 'Día 1',
+        exercises: matchedIds.map((id) => ({ exerciseId: id, sets: 3, reps: 10 })),
+      },
+    ],
   })
 }

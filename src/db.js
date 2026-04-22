@@ -2,26 +2,58 @@ import Dexie from 'dexie'
 
 export const db = new Dexie('GymTrackDB')
 
+// Version 1 — original schema (kept for migration chain)
 db.version(1).stores({
-  // ── Catálogo de ejercicios
-  // name indexed for autocomplete; muscleGroup for filtering
   exercises: '++id, name, muscleGroup',
-
-  // ── Rutinas del usuario
-  // days: array de strings (ej. ["Lunes", "Miércoles"])
-  // exerciseIds: array de ids de exercises
   routines: '++id, name',
-
-  // ── Sesiones de entrenamiento completadas
-  // routineId nullable (puede ser entrenamiento libre)
   workouts: '++id, routineId, date',
-
-  // ── Series individuales de cada sesión
-  // workoutId + exerciseId forman la FK compuesta
   workout_sets: '++id, workoutId, exerciseId, setOrder',
 })
 
+// Version 2 — new routine format: scheduledDays + trainingDays; exercises get optional photo
+db.version(2).stores({
+  exercises: '++id, name, muscleGroup',
+  routines: '++id, name',
+  workouts: '++id, routineId, date',
+  workout_sets: '++id, workoutId, exerciseId, setOrder',
+}).upgrade((tx) => {
+  // Migrate old routines: { days: string[], exerciseIds: number[] }
+  // →  new: { scheduledDays: string[], trainingDays: [{ name, exercises: [{exerciseId,sets,reps}] }] }
+  return tx.table('routines').toCollection().modify((routine) => {
+    if (routine.exerciseIds !== undefined) {
+      const scheduledDays = Array.isArray(routine.days) ? routine.days : []
+      const ids = Array.isArray(routine.exerciseIds) ? routine.exerciseIds : []
+      routine.scheduledDays = scheduledDays
+      routine.trainingDays = [
+        {
+          name: 'Día 1',
+          exercises: ids.map((id) => ({ exerciseId: id, sets: 3, reps: 10 })),
+        },
+      ]
+      delete routine.days
+      delete routine.exerciseIds
+    }
+  })
+})
+
 // ─── Helpers de consulta ────────────────────────────────────────────────────
+
+/** Total de ejercicios distintos en una rutina (compatible con ambos formatos) */
+export function getRoutineExerciseCount(routine) {
+  if (routine.trainingDays) {
+    const ids = new Set(routine.trainingDays.flatMap((d) => d.exercises.map((e) => e.exerciseId)))
+    return ids.size
+  }
+  return routine.exerciseIds?.length ?? 0
+}
+
+/** Todos los IDs de ejercicios de una rutina, sin duplicados */
+export function getRoutineExerciseIds(routine) {
+  if (routine.trainingDays) {
+    return [...new Set(routine.trainingDays.flatMap((d) => d.exercises.map((e) => e.exerciseId)))]
+  }
+  return routine.exerciseIds ?? []
+}
 
 /** Último workout_set para un ejercicio dado (para mostrar peso anterior) */
 export async function getLastSetForExercise(exerciseId) {
@@ -32,7 +64,6 @@ export async function getLastSetForExercise(exerciseId) {
 
   if (!sets.length) return null
 
-  // Ordenar por workoutId DESC (proxy de fecha) y devolver el primero
   sets.sort((a, b) => b.workoutId - a.workoutId)
   return sets[0]
 }
@@ -44,7 +75,6 @@ export async function getVolumeHistoryForExercise(exerciseId, limit = 20) {
     .equals(exerciseId)
     .toArray()
 
-  // Agrupar por workoutId y sumar volumen (series × reps × peso)
   const byWorkout = {}
   for (const s of sets) {
     if (!byWorkout[s.workoutId]) byWorkout[s.workoutId] = { workoutId: s.workoutId, volume: 0 }
@@ -63,7 +93,6 @@ export async function getVolumeHistoryForExercise(exerciseId, limit = 20) {
 
 /** 1RM estimado (fórmula de Epley): peso × (1 + reps/30) */
 export async function get1RMHistoryForExercise(exerciseId, limit = 20) {
-  const history = await getVolumeHistoryForExercise(exerciseId, limit)
   const sets = await db.workout_sets.where('exerciseId').equals(exerciseId).toArray()
 
   const workoutIds = [...new Set(sets.map((s) => s.workoutId))]

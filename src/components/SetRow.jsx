@@ -5,10 +5,9 @@ import { useWeightUnit } from '../hooks/useWeightUnit'
 
 const SWIPE_THRESHOLD = -72
 
-export default function SetRow({ index, set, prevSet, onUpdate, onRemove, onDone }) {
+export default function SetRow({ index, set, prevSet, onUpdate, onRemove, onDone, onUndo }) {
   const { unit, display, toKg } = useWeightUnit()
 
-  // Display values in selected unit; internal storage always kg
   const [weightDisplay, setWeightDisplay] = useState(
     set.weight != null ? String(display(set.weight)) : ''
   )
@@ -26,7 +25,6 @@ export default function SetRow({ index, set, prevSet, onUpdate, onRemove, onDone
   async function handleDragEnd(_, info) {
     if (info.offset.x < SWIPE_THRESHOLD) {
       await controls.start({ x: -80, transition: { type: 'spring', stiffness: 500, damping: 40 } })
-      // brief pause so user sees the delete zone, then remove
       await new Promise((r) => setTimeout(r, 120))
       await controls.start({ x: -400, opacity: 0, transition: { duration: 0.22 } })
       onRemove()
@@ -71,8 +69,8 @@ export default function SetRow({ index, set, prevSet, onUpdate, onRemove, onDone
         onDragEnd={handleDragEnd}
         animate={controls}
         style={{ x, opacity: rowOpacity }}
-        className={`relative flex items-center gap-3 px-4 py-2.5 bg-black transition-colors ${
-          isDone ? 'opacity-55' : ''
+        className={`relative flex items-center gap-3 px-4 py-2.5 transition-colors ${
+          isDone ? 'bg-[#30D158]/5' : 'bg-black'
         }`}
       >
         {/* Set number */}
@@ -127,16 +125,18 @@ export default function SetRow({ index, set, prevSet, onUpdate, onRemove, onDone
           </div>
         </div>
 
-        {/* Done button */}
+        {/* Done / Undo button */}
         <AnimatePresence mode="wait">
           {isDone ? (
-            <motion.div
+            <motion.button
               key="done"
               initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
-              className="w-9 h-9 bg-[#30D158]/20 rounded-full flex items-center justify-center flex-shrink-0"
+              onClick={onUndo}
+              className="pressable w-9 h-9 bg-[#30D158]/20 rounded-full flex items-center justify-center flex-shrink-0"
+              title="Desmarcar"
             >
               <Check size={16} className="text-[#30D158]" strokeWidth={2.5} />
-            </motion.div>
+            </motion.button>
           ) : (
             <motion.button
               key="check"

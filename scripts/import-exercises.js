@@ -1,14 +1,19 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 import { ROOT, REVISION, SOURCE, sourceRecords, download, parallel } from './catalog-source.js'
 
 const records = await sourceRecords()
+const spanishNames = JSON.parse(await readFile(new URL('./exercise-names.es.json', import.meta.url), 'utf8'))
+for (const record of records) {
+  if (!spanishNames[record.id]?.trim()) throw new Error(`Missing Spanish name: ${record.id}`)
+}
 const destination = resolve(ROOT, 'public/catalog')
 await mkdir(destination, { recursive: true })
 const normalized = records.map((record) => ({
   catalogId: record.id,
-  name: record.name,
+  name: spanishNames[record.id],
+  originalName: record.name,
   equipment: record.equipment,
   target: record.target,
   bodyPart: record.body_part,
@@ -23,6 +28,7 @@ await writeFile(resolve(destination, 'exercises.json'), json)
 await writeFile(resolve(destination, 'source.json'), JSON.stringify({
   repository: 'https://github.com/hasaneyldrm/exercises-dataset', revision: REVISION,
   source: SOURCE, count: records.length, sha256: createHash('sha256').update(json).digest('hex'),
+  nameLanguage: 'es', translationRevision: 'es-v1',
   dataLicense: 'MIT', mediaOwner: 'Gym visual', resolution: [180, 180],
 }, null, 2) + '\n')
 for (const name of ['LICENSE', 'NOTICE.md']) {

@@ -2,7 +2,7 @@ import { beforeEach, afterAll, describe, it, expect, vi } from 'vitest'
 import Dexie from 'dexie'
 import catalog from '../public/catalog/exercises.json'
 import { db, archiveExercise, saveWorkoutSession } from './db'
-import { importCatalog } from './seed'
+import { CATALOG_REVISION, importCatalog, initializeCatalog } from './seed'
 import { ROUTINE_TEMPLATES, resolveTemplate } from './lib/routineTemplates'
 import { filterExercises } from './lib/catalog'
 import { saveRoutineFromAI } from './lib/gemini'
@@ -36,8 +36,49 @@ describe('catalog and existing data', () => {
     await importCatalog(catalog)
     expect(await db.exercises.count()).toBe(1324)
     expect(await db.exercises.get(bench.id)).toMatchObject({ name: 'Mi banca', photoBase64: 'photo', archived: true })
-    expect(filterExercises(await db.exercises.toArray(), { query: 'mi banca' })).toHaveLength(0)
+    expect(filterExercises(await db.exercises.toArray(), { query: 'mi banca' }).map((record) => record.id)).not.toContain(bench.id)
     expect(filterExercises(await db.exercises.toArray(), { query: 'mi banca', archived: true })).toHaveLength(1)
+  }, 15000)
+  it('updates the English catalog on startup without losing edits, IDs or history, and only updates once', async () => {
+    const previousRevision = CATALOG_REVISION.split(':')[0]
+    const bench = catalog.find((record) => record.catalogId === '0025')
+    const squat = catalog.find((record) => record.catalogId === '0043')
+    const benchId = await db.exercises.add({ ...bench, name: bench.originalName,
+      catalogName: bench.originalName, photoBase64: 'photo', archived: true, muscleGroup: 'Pecho' })
+    const squatId = await db.exercises.add({ ...squat, name: 'Mi sentadilla', catalogName: squat.originalName })
+    const customId = await db.exercises.add({ name: 'Mi ejercicio', muscleGroup: 'Core' })
+    const routineId = await db.routines.add({ name: 'Mi plan', trainingDays: [{ exercises: [{ exerciseId: benchId }] }] })
+    const workoutId = await db.workouts.add({ routineId, date: '2026-09-01' })
+    await db.workout_sets.add({ workoutId, exerciseId: benchId, reps: 8, weight: 50 })
+    await db.metadata.put({ key: 'catalog', revision: previousRevision })
+    const fetchCatalog = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, json: async () => catalog })
+
+    await initializeCatalog()
+    expect(await db.exercises.get(benchId)).toMatchObject({ id: benchId, name: 'Press de banca con barra',
+      catalogName: 'barbell bench press', photoBase64: 'photo', archived: true, muscleGroup: 'Pecho' })
+    expect(await db.exercises.get(squatId)).toMatchObject({ name: 'Mi sentadilla' })
+    expect(await db.exercises.get(customId)).toMatchObject({ name: 'Mi ejercicio' })
+    expect((await db.routines.get(routineId)).trainingDays[0].exercises[0].exerciseId).toBe(benchId)
+    expect((await db.workout_sets.toArray())[0]).toMatchObject({ workoutId, exerciseId: benchId, reps: 8, weight: 50 })
+    expect(await db.exercises.count()).toBe(1325)
+    expect(await db.metadata.get('catalog')).toMatchObject({ revision: CATALOG_REVISION, count: 1324 })
+    await initializeCatalog()
+    expect(fetchCatalog).toHaveBeenCalledTimes(1)
+  }, 15000)
+  it('has Spanish names for the whole catalog and supports Spanish and English searches after renaming', async () => {
+    expect(catalog).toHaveLength(1324)
+    expect(catalog.every((record) => record.originalName && record.name !== record.originalName)).toBe(true)
+    await importCatalog(catalog)
+    const bench = await db.exercises.where('catalogId').equals('0025').first()
+    const curl = await db.exercises.where('catalogId').equals('0031').first()
+    await db.exercises.update(bench.id, { name: 'Mi banca' })
+    const exercises = await db.exercises.toArray()
+    for (const query of ['press de banca con barra', 'barbell bench press', 'mi banca']) {
+      expect(filterExercises(exercises, { query }).map((record) => record.id)).toContain(bench.id)
+    }
+    for (const query of ['curl de biceps con barra', 'barbell curl']) {
+      expect(filterExercises(exercises, { query }).map((record) => record.id)).toContain(curl.id)
+    }
   }, 15000)
   it('rejects an invalid source before mutating the database', async () => {
     await expect(importCatalog([catalog[0], catalog[0]])).rejects.toThrow('Registro inválido')

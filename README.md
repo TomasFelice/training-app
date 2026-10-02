@@ -15,7 +15,7 @@ Para habilitar el coach, copiá `.env.example` a `.env` y configurá `VITE_GEMIN
 
 ## Qué incluye
 
-- 1.324 ejercicios con nombres originales, instrucciones en español, miniaturas y MP4 de 180×180. Búsqueda por nombre, alias en español, grupo muscular y equipamiento.
+- 1.324 ejercicios con nombres e instrucciones en español, miniaturas y MP4 de 180×180. Búsqueda por nombre en español o inglés, alias, grupo muscular y equipamiento.
 - Plantillas Full body inicial, Torso/pierna, Push/pull/legs y Full body con mancuernas. Se copian al editor y se guardan como rutinas personales independientes.
 - Edición de series y reps con borradores vacíos y validación de enteros positivos al confirmar.
 - Sesiones persistidas localmente: orden de ejercicios, valores de las series, esfuerzo y tiempos. Minimizar conserva la sesión; descartar requiere confirmación.
@@ -28,6 +28,8 @@ El tiempo de entrenamiento incluye el tiempo fuera de la pantalla o de la app. S
 ## Catálogo reproducible
 
 Origen: [hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset), revisión fija `7455efae41b330c265e7cd4b78dfa848e7ce5ebd`. Procedencia, checksum y licencias: `public/catalog/source.json`, `LICENSE` y `NOTICE.md`.
+
+Los nombres en español están versionados por ID en `scripts/exercise-names.es.json`. La importación exige una traducción para cada ejercicio y conserva su nombre inglés en `originalName`; no usa traducción automática en tiempo de ejecución.
 
 ```sh
 npm run catalog:import
@@ -63,7 +65,7 @@ El código/datos/instrucciones del catálogo están bajo MIT. Las imágenes y an
 
 La versión 3 de la base conserva las migraciones previas, IDs numéricos y referencias de rutinas/historial. Agrega identidad de catálogo e índices, y un identificador único para cada sesión guardada.
 
-El enriquecimiento usa correspondencias explícitas en `src/lib/catalog.js`. Conserva nombres, grupos, fotos y estado oculto existentes. Los movimientos sin correspondencia segura permanecen personalizados. Ocultar siempre archiva el ejercicio para conservar referencias, incluso en un entrenamiento sin guardar; puede restaurarse desde “Ver ocultos”.
+El enriquecimiento usa correspondencias explícitas en `src/lib/catalog.js`. La revisión `es-v1` traduce los nombres predeterminados del catálogo ya instalado y conserva los nombres personalizados, grupos, fotos y estado oculto existentes. Los nombres originales en inglés siguen disponibles para buscar. Los movimientos sin correspondencia segura permanecen personalizados. Ocultar siempre archiva el ejercicio para conservar referencias, incluso en un entrenamiento sin guardar; puede restaurarse desde “Ver ocultos”.
 
 La inicialización del catálogo es transaccional e idempotente y se espera antes de mostrar la app. Si falla, la pantalla de inicio ofrece reintentar sin borrar datos.
 
@@ -86,6 +88,6 @@ npm run test:e2e
 
 `APP_URL` permite usar otro servidor. El script crea contextos de prueba aislados, genera capturas en `test-results` y verifica tamaños mobile/desktop, edición, reproducción MP4, navegación, recarga, cierre/reapertura con datos persistidos, tiempos después de suspensión, fallo/reintento de guardado, instalación y uso offline. No envía consultas a Gemini ni modifica datos de un perfil de navegador personal.
 
-Las 18 pruebas de Vitest cubren migración desde v1, catálogo completo, importación repetida, conservación de fotos/ediciones, archivado, plantillas independientes, alias del coach, edición numérica, conservación del peso al cambiar unidades, persistencia y timers, transacciones/reintentos y actualización diferida de la PWA.
+Las pruebas de Vitest cubren migración desde v1 y desde el catálogo en inglés, catálogo completo en español, búsqueda bilingüe, importación repetida, conservación de fotos/ediciones, archivado, plantillas independientes, alias del coach, edición numérica, conservación del peso al cambiar unidades, persistencia y timers, transacciones/reintentos y actualización diferida de la PWA.
 
 La revisión visual y funcional se realizó en Chromium con emulación mobile (360, 390, 430 px), desktop (1280 px), instrucciones iOS y viewport reducido para simular el teclado. WebKit no pudo iniciar en este host Windows por DLL faltantes; el script registra esa limitación. **La reproducción e instalación en Safari iOS y Chrome Android en dispositivos reales quedan pendientes de comprobación.**

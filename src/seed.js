@@ -1,7 +1,7 @@
 import { db } from './db'
 import { aliasesFor, LEGACY_CATALOG_IDS, muscleLabel } from './lib/catalog'
 
-export const CATALOG_REVISION = '7455efae41b330c265e7cd4b78dfa848e7ce5ebd'
+export const CATALOG_REVISION = '7455efae41b330c265e7cd4b78dfa848e7ce5ebd:es-v1'
 
 export async function importCatalog(records, database = db) {
   if (!Array.isArray(records) || !records.length) throw new Error('El catálogo está vacío')
@@ -21,11 +21,13 @@ export async function importCatalog(records, database = db) {
     const updates = []
     for (const record of records) {
       const saved = catalogMap.get(record.catalogId) ?? legacyMap.get(record.catalogId)
-      const details = { ...record, catalogName: record.name, muscleGroup: muscleLabel(record.target),
-        aliases: [...new Set([...aliasesFor(record.catalogId), ...(saved?.aliases ?? [])])] }
+      const details = { ...record, catalogName: record.originalName ?? record.name, muscleGroup: muscleLabel(record.target),
+        aliases: [...new Set([record.name, record.originalName, ...aliasesFor(record.catalogId),
+          ...(saved?.aliases ?? [])].filter(Boolean))] }
       if (saved) {
-        // User-visible names, groups, photos and hidden state remain intact.
-        updates.push({ ...saved, ...details, name: saved.name,
+        // Translate untouched catalog names; keep custom and legacy Spanish names.
+        const wasDefaultName = saved.name === saved.catalogName || saved.name === record.originalName
+        updates.push({ ...saved, ...details, name: wasDefaultName ? record.name : saved.name,
           muscleGroup: saved.muscleGroup ?? details.muscleGroup })
       } else additions.push(details)
     }

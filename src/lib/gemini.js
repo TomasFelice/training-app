@@ -1,12 +1,19 @@
 import { db, getAIContext } from '../db'
 import { normalizeSearch } from './catalog'
+import { requestGemini } from './geminiRequest'
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY?.trim()
 export const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL?.trim() || 'gemini-3.8-flash'
-export const GEMINI_MODEL_LABEL = GEMINI_MODEL === 'gemini-3.8-flash' ? 'Gemini 3.8 Flash' : GEMINI_MODEL
+export const GEMINI_FALLBACK_MODEL = import.meta.env.VITE_GEMINI_FALLBACK_MODEL?.trim() ?? 'gemini-3.1-flash-lite'
 
-const GEMINI_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`
+export function getGeminiModelLabel(model) {
+  return ({ 'gemini-3.8-flash': 'Gemini 3.8 Flash', 'gemini-3.1-flash-lite': 'Gemini 3.1 Flash-Lite',
+    'gemini-3.5-flash-lite': 'Gemini 3.5 Flash-Lite' })[model] ?? model
+}
+export const GEMINI_MODEL_LABEL = getGeminiModelLabel(GEMINI_MODEL)
+
+const geminiUrl = (model) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`
 
 export function hasApiKey() {
   return Boolean(API_KEY)
@@ -84,24 +91,23 @@ Nunca inventés datos de entrenamiento. Usá solo el contexto provisto.`
 
 // ── Main send function ────────────────────────────────────────────────────
 
-export async function sendMessage(messages) {
+export async function sendMessage(messages, options = {}) {
   if (!API_KEY) throw new Error('VITE_GEMINI_API_KEY no está configurada en el archivo .env')
 
   const context = await buildContext()
 
   const systemWithContext = `${SYSTEM_PROMPT}\n\n${context}`
 
-  const contents = messages.map((m) => ({
-    role: m.role === 'user' ? 'user' : 'model',
-    // Keep model parts intact to preserve thinking signatures across turns.
-    parts: m.role === 'user' ? [{ text: m.content }] : (m.parts ?? [{ text: m.content }]),
-  }))
-
-  const res = await fetch(GEMINI_URL, {
+  const requestFor = (model) => ({
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY },
     body: JSON.stringify({
-      contents,
+      contents: messages.map((m) => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        // Thinking signatures are model-specific. Carry only visible text across models.
+        parts: m.role !== 'user' && (m.model ?? GEMINI_MODEL) === model
+          ? (m.parts ?? [{ text: m.content }]) : [{ text: m.content }],
+      })),
       systemInstruction: { parts: [{ text: systemWithContext }] },
       generationConfig: {
         temperature: 1,
@@ -111,18 +117,25 @@ export async function sendMessage(messages) {
       },
     }),
   })
+  const fallbackEnabled = Boolean(GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_MODEL)
+  options.onModel?.(GEMINI_MODEL)
+  const { response: res, data, usedFallback } = await requestGemini(geminiUrl(GEMINI_MODEL), requestFor(GEMINI_MODEL), {
+    ...options,
+    fallbackRequest: fallbackEnabled ? { url: geminiUrl(GEMINI_FALLBACK_MODEL), init: requestFor(GEMINI_FALLBACK_MODEL) } : undefined,
+    onFallback: () => options.onModel?.(GEMINI_FALLBACK_MODEL),
+  })
+  const model = usedFallback ? GEMINI_FALLBACK_MODEL : GEMINI_MODEL
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
+    const err = data
     if (res.status === 429) throw new Error('Se alcanzó la cuota de Gemini para este proyecto. Volvé a intentar más tarde o revisá los límites en Google AI Studio. Google AI Pro tiene límites separados de la API.')
     if (res.status === 401 || res.status === 403 || err?.error?.message?.includes('API key not valid')) {
       throw new Error('La clave de Gemini no es válida o no tiene acceso. Revisá VITE_GEMINI_API_KEY en .env y los permisos del proyecto en Google AI Studio.')
     }
-    if (res.status === 404) throw new Error(`El modelo ${GEMINI_MODEL} no está disponible para este proyecto. Revisá VITE_GEMINI_MODEL en .env.`)
+    if (res.status === 404) throw new Error(`El modelo ${model} no está disponible para este proyecto. Revisá ${usedFallback ? 'VITE_GEMINI_FALLBACK_MODEL' : 'VITE_GEMINI_MODEL'} en .env.`)
     throw new Error(err?.error?.message ?? `Error ${res.status}`)
   }
 
-  const data = await res.json()
   const candidate = data.candidates?.[0]
   if (candidate?.finishReason === 'MAX_TOKENS') {
     throw new Error('Gemini no pudo completar la respuesta dentro del límite. Probá pedir una rutina o un análisis más breve.')
@@ -130,7 +143,7 @@ export async function sendMessage(messages) {
   const parts = candidate?.content?.parts ?? []
   const content = parts.filter((part) => !part.thought && typeof part.text === 'string').map((part) => part.text).join('').trim()
   if (!content) throw new Error('Gemini no devolvió una respuesta. Probá reformular la consulta.')
-  return { content, parts }
+  return { content, parts, model }
 }
 
 // ── Parse routine JSON from AI response ──────────────────────────────────

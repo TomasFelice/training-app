@@ -4,7 +4,7 @@ import {
   Sparkles, Send, ChevronRight,
   CheckCircle, AlertCircle, Dumbbell, RotateCcw, X,
 } from 'lucide-react'
-import { sendMessage, parseRoutineFromResponse, saveRoutineFromAI, hasApiKey, GEMINI_MODEL_LABEL } from '../lib/gemini'
+import { sendMessage, parseRoutineFromResponse, saveRoutineFromAI, hasApiKey, GEMINI_MODEL_LABEL, getGeminiModelLabel } from '../lib/gemini'
 import { useUIStore } from '../store'
 
 const SUGGESTIONS = [
@@ -25,10 +25,10 @@ function NoKeyScreen() {
 
 function MessageBubble({ msg, onSaveRoutine }) {
   const isUser = msg.role === 'user'
-  const routine = !isUser ? parseRoutineFromResponse(msg.content) : null
+  const routine = !isUser && !msg.loading ? parseRoutineFromResponse(msg.content) : null
 
   const displayText = msg.content
-    .replace(/<ROUTINE_JSON>[\s\S]*?<\/ROUTINE_JSON>/g, '')
+    .replace(/<ROUTINE_JSON>[\s\S]*?(?:<\/ROUTINE_JSON>|$)/g, '')
     .trim()
 
   return (
@@ -99,8 +99,18 @@ export default function AIPage() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [requestStatus, setRequestStatus] = useState('')
+  const [modelLabel, setModelLabel] = useState(GEMINI_MODEL_LABEL)
+  const [failedRequest, setFailedRequest] = useState(null)
   const [savedRoutine, setSavedRoutine] = useState(null)
   const bottomRef = useRef(null)
+  const requestRef = useRef(null)
+
+  useEffect(() => () => {
+    const controller = requestRef.current
+    requestRef.current = null
+    controller?.abort()
+  }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -110,24 +120,57 @@ export default function AIPage() {
 
   async function handleSend(text) {
     const content = (text ?? input).trim()
-    if (!content || loading) return
+    if (!content || requestRef.current) return
     setInput('')
     setError(null)
 
     const userMsg = { role: 'user', content }
-    const loadingMsg = { role: 'assistant', content: '', loading: true }
-    setMessages((prev) => [...prev, userMsg, loadingMsg])
+    await runRequest([...messages, userMsg])
+  }
+
+  async function runRequest(conversation) {
+    if (requestRef.current) return
+    const controller = new AbortController()
+    requestRef.current = controller
+    setError(null)
+    setFailedRequest(null)
+    setMessages([...conversation, { role: 'assistant', content: '', loading: true }])
     setLoading(true)
 
     try {
-      const reply = await sendMessage([...messages, userMsg])
-      setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', ...reply }])
+      const reply = await sendMessage(conversation, {
+        signal: controller.signal,
+        onModel: (model) => { if (requestRef.current === controller) setModelLabel(getGeminiModelLabel(model)) },
+        onStatus: (status) => { if (requestRef.current === controller) setRequestStatus(status) },
+        onChunk: (content) => {
+          if (requestRef.current === controller) setMessages([...conversation, { role: 'assistant', content, loading: true }])
+        },
+      })
+      if (requestRef.current === controller) setMessages([...conversation, { role: 'assistant', ...reply }])
     } catch (err) {
-      setMessages((prev) => prev.slice(0, -1))
-      setError(err.message)
+      if (requestRef.current !== controller) return
+      setMessages(conversation)
+      setFailedRequest(conversation)
+      setError(err.name === 'AbortError' ? 'Consulta cancelada. Podés reintentar cuando quieras.' : err.message)
     } finally {
-      setLoading(false)
+      if (requestRef.current === controller) {
+        requestRef.current = null
+        setLoading(false)
+        setRequestStatus('')
+      }
     }
+  }
+
+  function resetConversation() {
+    const controller = requestRef.current
+    requestRef.current = null
+    controller?.abort()
+    setMessages([])
+    setError(null)
+    setFailedRequest(null)
+    setRequestStatus('')
+    setModelLabel(GEMINI_MODEL_LABEL)
+    setLoading(false)
   }
 
   async function handleSaveRoutine(parsed) {
@@ -147,7 +190,7 @@ export default function AIPage() {
       {/* Header */}
       <div className="px-5 pb-3 flex-shrink-0">
         <h1 className="text-white text-2xl font-bold tracking-tight">IA Coach</h1>
-        <p className="text-[var(--muted)] text-xs mt-0.5">{GEMINI_MODEL_LABEL} · Razonamiento medio</p>
+        <p className="text-[var(--muted)] text-xs mt-0.5">{modelLabel} · Razonamiento medio</p>
       </div>
 
       {/* Messages */}
@@ -188,11 +231,13 @@ export default function AIPage() {
           {error && (
             <Motion.div
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              role="alert"
               className="flex items-center gap-2 bg-[var(--danger)]/15 border border-[var(--danger)]/30 rounded-2xl px-4 py-3 mb-3"
             >
               <AlertCircle size={15} className="text-[var(--danger)] flex-shrink-0" />
               <p className="text-[var(--danger)] text-xs flex-1">{error}</p>
-              <button onClick={() => setError(null)} className="pressable">
+              {failedRequest && <button onClick={() => runRequest(failedRequest)} disabled={loading} className="pressable text-xs font-semibold">Reintentar</button>}
+              <button onClick={() => setError(null)} className="pressable" aria-label="Cerrar error">
                 <X size={14} className="text-[var(--danger)]" />
               </button>
             </Motion.div>
@@ -220,9 +265,13 @@ export default function AIPage() {
         className="glass border-t border-white/8 flex-shrink-0 px-4 py-3"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
       >
+        {loading && <div className="flex items-center justify-between gap-3 mb-2">
+          <p role="status" className="text-[var(--muted)] text-xs">{requestStatus || 'Consultando al coach…'}</p>
+          <button onClick={() => requestRef.current?.abort()} className="pressable text-[var(--muted)] text-xs">Cancelar consulta</button>
+        </div>}
         {messages.length > 0 && (
           <button
-            onClick={() => setMessages([])}
+            onClick={resetConversation}
             className="pressable flex items-center gap-1 text-[var(--muted)] text-xs mb-2"
           >
             <RotateCcw size={11} /> Nueva conversación
@@ -244,6 +293,7 @@ export default function AIPage() {
           </div>
           <button
             onClick={() => handleSend()}
+            aria-label="Enviar consulta"
             disabled={!input.trim() || loading}
             className="pressable w-11 h-11 bg-[var(--accent)] rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-30 disabled:bg-[var(--surface-raised)]"
           >

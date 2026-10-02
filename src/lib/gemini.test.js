@@ -15,11 +15,12 @@ beforeEach(async () => {
   vi.resetModules()
   vi.stubEnv('VITE_GEMINI_API_KEY', 'test-api-key')
   vi.stubEnv('VITE_GEMINI_MODEL', '')
+  vi.stubEnv('VITE_GEMINI_FALLBACK_MODEL', 'gemini-3.1-flash-lite')
   fetchGemini = vi.fn()
   vi.stubGlobal('fetch', fetchGemini)
   gemini = await import('./gemini')
 })
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers() })
 
 const userMessage = { role: 'user', content: 'Generá una rutina' }
 const response = (data, status = 200) => ({ ok: status === 200, status, json: async () => data })
@@ -37,7 +38,7 @@ describe('Gemini coach integration', () => {
     expect(reply.parts).toEqual(parts)
     expect(gemini.parseRoutineFromResponse(reply.content)).toMatchObject({ name: 'Fuerza', exercises: ['Sentadilla'] })
     const [url, request] = fetchGemini.mock.calls[0]
-    expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent')
+    expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:streamGenerateContent?alt=sse')
     expect(url).not.toContain('test-api-key')
     expect(request.headers['x-goog-api-key']).toBe('test-api-key')
     const body = JSON.parse(request.body)
@@ -53,6 +54,59 @@ describe('Gemini coach integration', () => {
     fetchGemini.mockResolvedValue(response({ error: { message: 'Quota exceeded' } }, 429))
     await expect(gemini.sendMessage([userMessage])).rejects.toThrow('Se alcanzó la cuota')
     expect(fetchGemini).toHaveBeenCalledTimes(1)
+  })
+  it('falls back after persistent saturation, keeps the query and medium reasoning, and separates model signatures', async () => {
+    vi.useFakeTimers()
+    const primaryParts = [{ text: 'Respuesta anterior de Flash.', thoughtSignature: 'flash-signature' }]
+    const liteParts = [{ text: 'Respuesta anterior de Lite.', thoughtSignature: 'lite-signature' }]
+    const messages = [userMessage,
+      { role: 'assistant', content: primaryParts[0].text, parts: primaryParts, model: 'gemini-3.8-flash' },
+      { role: 'user', content: 'Ajustala' },
+      { role: 'assistant', content: liteParts[0].text, parts: liteParts, model: 'gemini-3.1-flash-lite' },
+      { role: 'user', content: 'Sumá un día' },
+    ]
+    const newParts = [{ text: 'Rutina alternativa.', thoughtSignature: 'new-lite-signature' }]
+    fetchGemini.mockImplementation(async (url) => url.includes('gemini-3.8-flash:')
+      ? response({ error: { message: 'High demand' } }, 503)
+      : response({ candidates: [{ content: { parts: newParts }, finishReason: 'STOP' }] }))
+    const onModel = vi.fn()
+    const pending = gemini.sendMessage(messages, { onModel })
+    await vi.advanceTimersByTimeAsync(10000)
+    const reply = await pending
+    expect(reply).toEqual({ content: 'Rutina alternativa.', parts: newParts, model: 'gemini-3.1-flash-lite' })
+    expect(fetchGemini).toHaveBeenCalledTimes(4)
+    const primaryBody = JSON.parse(fetchGemini.mock.calls[0][1].body)
+    const fallbackBody = JSON.parse(fetchGemini.mock.calls[3][1].body)
+    expect(primaryBody.contents[1].parts).toEqual(primaryParts)
+    expect(primaryBody.contents[3].parts).toEqual([{ text: liteParts[0].text }])
+    expect(fallbackBody.contents[1].parts).toEqual([{ text: primaryParts[0].text }])
+    expect(fallbackBody.contents[3].parts).toEqual(liteParts)
+    expect(fallbackBody.contents[4]).toEqual(primaryBody.contents[4])
+    expect(fallbackBody.systemInstruction).toEqual(primaryBody.systemInstruction)
+    expect(fallbackBody.generationConfig).toEqual(primaryBody.generationConfig)
+    expect(onModel.mock.calls).toEqual([['gemini-3.8-flash'], ['gemini-3.1-flash-lite']])
+    fetchGemini.mockResolvedValue(response({ candidates: [{ content: { parts: [{ text: 'Volvió Flash.' }] } }] }))
+    await gemini.sendMessage([...messages, { role: 'assistant', ...reply }, userMessage])
+    expect(fetchGemini.mock.calls[4][0]).toContain('gemini-3.8-flash:')
+    expect(JSON.parse(fetchGemini.mock.calls[4][1].body).contents[5].parts).toEqual([{ text: reply.content }])
+  })
+  it.each(['', 'gemini-3.8-flash'])('disables fallback when blank or identical to the primary (%s)', async (fallbackModel) => {
+    vi.stubEnv('VITE_GEMINI_FALLBACK_MODEL', fallbackModel)
+    vi.resetModules()
+    gemini = await import('./gemini')
+    vi.useFakeTimers()
+    fetchGemini.mockResolvedValue(response({}, 503))
+    const failure = expect(gemini.sendMessage([userMessage])).rejects.toThrow('Gemini está saturado')
+    await vi.advanceTimersByTimeAsync(10000)
+    await failure
+    expect(fetchGemini).toHaveBeenCalledTimes(3)
+    expect(fetchGemini.mock.calls.every(([url]) => url.includes('gemini-3.8-flash:'))).toBe(true)
+  })
+  it('identifies an unavailable fallback model and its environment variable', async () => {
+    fetchGemini.mockResolvedValueOnce(new Response('{}', { status: 503, headers: { 'Retry-After': '120' } }))
+      .mockResolvedValueOnce(response({}, 404))
+    await expect(gemini.sendMessage([userMessage])).rejects.toThrow('gemini-3.1-flash-lite no está disponible para este proyecto. Revisá VITE_GEMINI_FALLBACK_MODEL')
+    expect(fetchGemini).toHaveBeenCalledTimes(2)
   })
   it.each([
     [400, { error: { message: 'API key not valid. Please pass a valid API key.' } }, 'La clave de Gemini'],

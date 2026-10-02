@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/hasaneyldrm/exercises-dataset",
+  "revision": "7455efae41b330c265e7cd4b78dfa848e7ce5ebd",
+  "source": "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/7455efae41b330c265e7cd4b78dfa848e7ce5ebd",
+  "count": 1324,
+  "sha256": "199ce47a3e18b30a102199920cfc95222eb4c0aa333545a0b327c86787a7b539",
+  "dataLicense": "MIT",
+  "mediaOwner": "Gym visual",
+  "resolution": [
+    180,
+    180
+  ]
+}

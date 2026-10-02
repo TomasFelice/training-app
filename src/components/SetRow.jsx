@@ -1,155 +1,29 @@
-import { useState, useRef } from 'react'
-import { motion, AnimatePresence, useMotionValue, useTransform, useAnimation } from 'framer-motion'
 import { Check, Trash2 } from 'lucide-react'
 import { useWeightUnit } from '../hooks/useWeightUnit'
-
-const SWIPE_THRESHOLD = -72
+import { positiveInteger } from '../lib/routineTemplates'
 
 export default function SetRow({ index, set, prevSet, onUpdate, onRemove, onDone, onUndo }) {
   const { unit, display, toKg } = useWeightUnit()
-
-  const [weightDisplay, setWeightDisplay] = useState(
-    set.weight != null ? String(display(set.weight)) : ''
-  )
-  const [reps, setReps] = useState(set.reps != null ? String(set.reps) : '')
-  const repsRef = useRef(null)
-
-  const isDone = set.done
-
-  // Swipe-to-delete
-  const x = useMotionValue(0)
-  const deleteOpacity = useTransform(x, [-90, -40], [1, 0])
-  const rowOpacity    = useTransform(x, [-90, 0],  [0.6, 1])
-  const controls      = useAnimation()
-
-  async function handleDragEnd(_, info) {
-    if (info.offset.x < SWIPE_THRESHOLD) {
-      await controls.start({ x: -80, transition: { type: 'spring', stiffness: 500, damping: 40 } })
-      await new Promise((r) => setTimeout(r, 120))
-      await controls.start({ x: -400, opacity: 0, transition: { duration: 0.22 } })
-      onRemove()
-    } else {
-      controls.start({ x: 0, transition: { type: 'spring', stiffness: 500, damping: 40 } })
-    }
+  const weight = set.weightDraft != null && (!set.weightDraftUnit || set.weightDraftUnit === unit) ? set.weightDraft : set.weight != null ? String(display(set.weight)) : ''
+  const reps = set.repsDraft ?? (set.reps == null ? '' : String(set.reps))
+  const normalizedWeight = weight.replace(',', '.')
+  const validWeight = weight === '' || (/^(\d+([.,]\d*)?|[.,]\d+)$/.test(weight) && Number.isFinite(Number(normalizedWeight)))
+  const validReps = positiveInteger(reps)
+  function editWeight(value) {
+    const normalized = value.replace(',', '.')
+    onUpdate({ weightDraft: value, weightDraftUnit: unit, weight: value === '' ? null : Number.isFinite(Number(normalized)) && Number(normalized) >= 0 ? toKg(normalized) : null })
   }
-
-  function commit() {
-    onUpdate({
-      weight: weightDisplay === '' ? null : toKg(weightDisplay),
-      reps:   reps === '' ? null : Number(reps),
-    })
-  }
-
-  function handleDone() {
-    commit()
-    onDone({
-      weight: toKg(weightDisplay) ?? 0,
-      reps:   Number(reps) || 0,
-    })
-  }
-
-  const prevWeight = prevSet?.weight != null ? display(prevSet.weight) : null
-  const prevReps   = prevSet?.reps
-
-  return (
-    <div className="relative overflow-hidden">
-      {/* Delete background */}
-      <motion.div
-        style={{ opacity: deleteOpacity }}
-        className="absolute inset-y-0 right-0 w-20 flex items-center justify-center bg-[#FF453A]/20"
-      >
-        <Trash2 size={18} className="text-[#FF453A]" />
-      </motion.div>
-
-      {/* Swipeable row */}
-      <motion.div
-        drag={isDone ? false : 'x'}
-        dragConstraints={{ left: -80, right: 0 }}
-        dragElastic={{ left: 0.15, right: 0.05 }}
-        onDragEnd={handleDragEnd}
-        animate={controls}
-        style={{ x, opacity: rowOpacity }}
-        className={`relative flex items-center gap-3 px-4 py-2.5 transition-colors ${
-          isDone ? 'bg-[#30D158]/5' : 'bg-black'
-        }`}
-      >
-        {/* Set number */}
-        <span className="w-6 text-[#8E8E93] text-sm font-medium text-center flex-shrink-0">
-          {index + 1}
-        </span>
-
-        {/* Previous hint */}
-        <div className="w-16 flex-shrink-0 text-center">
-          {prevWeight != null ? (
-            <span className="text-[#48484A] text-xs tabular-nums">
-              {prevWeight}×{prevReps}
-            </span>
-          ) : (
-            <span className="text-[#3A3A3C] text-xs">—</span>
-          )}
-        </div>
-
-        {/* Weight */}
-        <div className="flex-1">
-          <div className={`flex items-center gap-1 bg-[#2C2C2E] rounded-xl px-3 py-2 ${isDone ? 'opacity-60' : ''}`}>
-            <input
-              type="number"
-              inputMode="decimal"
-              value={weightDisplay}
-              onChange={(e) => setWeightDisplay(e.target.value)}
-              onBlur={commit}
-              onKeyDown={(e) => { if (e.key === 'Enter') repsRef.current?.focus() }}
-              placeholder={prevWeight != null ? String(prevWeight) : '0'}
-              disabled={isDone}
-              className="w-full bg-transparent text-white text-sm font-medium text-center outline-none tabular-nums placeholder:text-[#3A3A3C]"
-            />
-            <span className="text-[#48484A] text-xs flex-shrink-0">{unit}</span>
-          </div>
-        </div>
-
-        {/* Reps */}
-        <div className="flex-1">
-          <div className={`flex items-center gap-1 bg-[#2C2C2E] rounded-xl px-3 py-2 ${isDone ? 'opacity-60' : ''}`}>
-            <input
-              ref={repsRef}
-              type="number"
-              inputMode="numeric"
-              value={reps}
-              onChange={(e) => setReps(e.target.value)}
-              onBlur={commit}
-              placeholder={prevReps != null ? String(prevReps) : '0'}
-              disabled={isDone}
-              className="w-full bg-transparent text-white text-sm font-medium text-center outline-none tabular-nums placeholder:text-[#3A3A3C]"
-            />
-            <span className="text-[#48484A] text-xs flex-shrink-0">rep</span>
-          </div>
-        </div>
-
-        {/* Done / Undo button */}
-        <AnimatePresence mode="wait">
-          {isDone ? (
-            <motion.button
-              key="done"
-              initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
-              onClick={onUndo}
-              className="pressable w-9 h-9 bg-[#30D158]/20 rounded-full flex items-center justify-center flex-shrink-0"
-              title="Desmarcar"
-            >
-              <Check size={16} className="text-[#30D158]" strokeWidth={2.5} />
-            </motion.button>
-          ) : (
-            <motion.button
-              key="check"
-              initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
-              onClick={handleDone}
-              disabled={!weightDisplay && !reps}
-              className="pressable w-9 h-9 bg-[#2C2C2E] rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-30"
-            >
-              <Check size={16} className="text-[#8E8E93]" strokeWidth={2.5} />
-            </motion.button>
-          )}
-        </AnimatePresence>
-      </motion.div>
+  function editReps(value) { onUpdate({ repsDraft: value, reps: positiveInteger(value) ? Number(value) : null }) }
+  return <div className={`set-row ${set.done ? 'set-done' : ''}`}>
+    <div className="set-inputs">
+      <span className="set-number">{index + 1}</span>
+      <label className="set-field"><span>Peso ({unit})</span><input aria-label={`Peso de serie ${index + 1}`} type="text" inputMode="decimal" value={weight} onChange={(e) => editWeight(e.target.value)} disabled={set.done} placeholder="0" aria-invalid={!validWeight || undefined} /></label>
+      <label className="set-field"><span>Reps</span><input aria-label={`Repeticiones de serie ${index + 1}`} type="text" inputMode="numeric" value={reps} onChange={(e) => editReps(e.target.value)} disabled={set.done} placeholder="0" aria-invalid={reps !== '' && !validReps || undefined} /></label>
+      <button className={`icon-button complete-set ${set.done ? 'selected' : ''}`} aria-label={`${set.done ? 'Desmarcar' : 'Completar'} serie ${index + 1}`}
+        aria-pressed={set.done} disabled={!set.done && (!validWeight || !validReps)} onClick={() => set.done ? onUndo() : onDone({ weight: set.weight ?? 0, reps: Number(reps) })}><Check size={21} /></button>
     </div>
-  )
+    <div className="set-meta"><span>{prevSet ? `Anterior: ${display(prevSet.weight ?? 0)} ${unit} × ${prevSet.reps}` : 'Sin registro anterior'}{set.rpe != null ? ` · RPE ${set.rpe}` : ''}</span>
+      <button className="icon-button remove-set" aria-label={`Quitar serie ${index + 1}`} onClick={onRemove}><Trash2 size={15} /></button></div>
+    {(!validWeight || (reps !== '' && !validReps)) && <p className="form-error">Usá un peso positivo o cero y repeticiones enteras mayores que cero.</p>}
+  </div>
 }

@@ -21,19 +21,26 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/*.png'],
+      registerType: 'prompt',
+      includeAssets: ['favicon.svg', 'icons/*.png', 'manifest.json'],
       manifest: false, // we use our own public/manifest.json
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}', 'catalog/exercises.json', 'manifest.json'],
+        globIgnores: ['catalog/images/**', 'catalog/videos/**'],
+        cleanupOutdatedCaches: true,
+        navigateFallbackDenylist: [/^\/catalog\//],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            urlPattern: ({ url }) => url.pathname.startsWith('/catalog/images/'),
             handler: 'CacheFirst',
-            options: { cacheName: 'google-fonts-cache' },
+            options: { cacheName: 'exercise-thumbnails', expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 } },
           },
         ],
       },
     }),
   ],
+  test: {
+    environment: 'jsdom', setupFiles: ['./src/test/setup.js'],
+    include: ['src/**/*.test.{js,jsx}'], css: false,
+  },
 })

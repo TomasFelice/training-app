@@ -1,4 +1,5 @@
 import { db, getAIContext } from '../db'
+import { normalizeSearch } from './catalog'
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY
 
@@ -132,8 +133,11 @@ export async function saveRoutineFromAI(parsed) {
 
   const allExercises = await db.exercises.toArray()
   const matchedIds = exerciseNames
-    .map((name) => allExercises.find((e) => e.name.toLowerCase() === name.toLowerCase())?.id)
+    .map((name) => allExercises.find((e) => [e.name, e.catalogName, ...(e.aliases ?? [])].filter(Boolean)
+      .some((alias) => normalizeSearch(alias) === normalizeSearch(name)))?.id)
     .filter(Boolean)
+
+  if (!matchedIds.length) throw new Error('No se encontraron los ejercicios de la rutina en el catálogo.')
 
   return db.routines.add({
     name: parsed.name,

@@ -4,13 +4,20 @@
   "description": "Registrá tus entrenamientos y superá tus límites.",
   "start_url": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#14181B",
+  "theme_color": "#14181B",
   "scope": "/",
   "lang": "es",
-  "categories": ["health", "fitness", "sports"],
+  "categories": [
+    "health",
+    "fitness",
+    "sports"
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -37,22 +44,18 @@
       "purpose": "maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "/screenshots/home.png",
-      "sizes": "390x844",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Pantalla principal de GymTrack"
-    }
-  ],
   "shortcuts": [
     {
       "name": "Nuevo Entrenamiento",
       "short_name": "Entrenar",
       "description": "Iniciar un entrenamiento rápido",
-      "url": "/routines",
-      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+      "url": "/?tab=routines",
+      "icons": [
+        {
+          "src": "/icons/icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
     }
   ],
   "prefer_related_applications": false

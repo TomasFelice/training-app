@@ -1,0 +1,116 @@
+{
+  "revision": "7455efae41b330c265e7cd4b78dfa848e7ce5ebd",
+  "configuration": {
+    "codec": "libx264",
+    "pixelFormat": "yuv420p",
+    "crf": 23,
+    "preset": "slow",
+    "resolution": "180x180",
+    "audio": false,
+    "fpsMode": "passthrough",
+    "timeBase": "1:100"
+  },
+  "count": 12,
+  "errors": 0,
+  "gifBytes": 1184363,
+  "mp4Bytes": 134739,
+  "savingsPercent": 88.62,
+  "files": [
+    {
+      "catalogId": "0001",
+      "gifBytes": 92828,
+      "mp4Bytes": 11102,
+      "durationSeconds": 3,
+      "output": "videos/0001-2gPfomN.mp4",
+      "verified": true
+    },
+    {
+      "catalogId": "0035",
+      "gifBytes": 110894,
+      "mp4Bytes": 10662,
+      "durationSeconds": 3,
+      "output": "videos/0035-LMGXZn8.mp4",
+      "verified": true
+    },
+    {
+      "catalogId": "0193",
+      "gifBytes": 102554,
+      "mp4Bytes": 11436,
+      "durationSeconds": 3,
+      "output": "videos/0193-WrYPP2g.mp4",
+      "verified": true
+    },
+    {
+      "catalogId": "0528",
+      "gifBytes": 93059,
+      "mp4Bytes": 14173,
+      "durationSeconds": 4.5,
+      "output": "videos/0528-I4KkPdl.mp4",
+      "verified": true
+    },
+    {
+      "catalogId": "0605",
+      "gifBytes": 108929,
+      "mp4Bytes": 12340,
+      "durationSeconds": 3,
+      "output": "videos/0605-ykUOVze.mp4",
+      "verified": true
+    },
+    {
+      "catalogId": "1327",
+      "gifBytes": 63279,
+      "mp4Bytes": 8125,
+      "durationSeconds": 3,
+      "output": "videos/1327-VnfUNW7.mp4",
+      "verified": true
+    },
+    {
+      "catalogId": "1457",
+      "gifBytes": 84502,
+      "mp4Bytes": 9986,
+      "durationSeconds": 3,
+      "output": "videos/1457-Kyd9Rz5.mp4",
+      "verified": true
+    },
+    {
+      "catalogId": "1734",
+      "gifBytes": 113547,
+      "mp4Bytes": 10911,
+      "durationSeconds": 3,
+      "output": "videos/1734-cAvTaSg.mp4",
+      "verified": true
+    },
+    {
+      "catalogId": "1747",
+      "gifBytes": 83747,
+      "mp4Bytes": 8609,
+      "durationSeconds": 3,
+      "output": "videos/1747-CFN9P8G.mp4",
+      "verified": true
+    },
+    {
+      "catalogId": "2202",
+      "gifBytes": 101281,
+      "mp4Bytes": 11110,
+      "durationSeconds": 3,
+      "output": "videos/2202-oMypNrz.mp4",
+      "verified": true
+    },
+    {
+      "catalogId": "2317",
+      "gifBytes": 115983,
+      "mp4Bytes": 13623,
+      "durationSeconds": 3,
+      "output": "videos/2317-JzQbv7J.mp4",
+      "verified": true
+    },
+    {
+      "catalogId": "3142",
+      "gifBytes": 113760,
+      "mp4Bytes": 12662,
+      "durationSeconds": 3,
+      "output": "videos/3142-dzz6BiV.mp4",
+      "verified": true
+    }
+  ]
+}

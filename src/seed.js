@@ -1,59 +1,45 @@
 import { db } from './db'
+import { aliasesFor, LEGACY_CATALOG_IDS, muscleLabel } from './lib/catalog'
 
-const EXERCISES = [
-  // Pecho
-  { name: 'Press Banca', muscleGroup: 'Pecho' },
-  { name: 'Press Banca Inclinado', muscleGroup: 'Pecho' },
-  { name: 'Press Banca Declinado', muscleGroup: 'Pecho' },
-  { name: 'Aperturas con Mancuernas', muscleGroup: 'Pecho' },
-  { name: 'Press con Mancuernas', muscleGroup: 'Pecho' },
-  { name: 'Fondos en Paralelas', muscleGroup: 'Pecho' },
-  { name: 'Crossover en Polea', muscleGroup: 'Pecho' },
-  // Espalda
-  { name: 'Dominadas', muscleGroup: 'Espalda' },
-  { name: 'Remo con Barra', muscleGroup: 'Espalda' },
-  { name: 'Remo con Mancuerna', muscleGroup: 'Espalda' },
-  { name: 'Jalón al Pecho', muscleGroup: 'Espalda' },
-  { name: 'Peso Muerto', muscleGroup: 'Espalda' },
-  { name: 'Peso Muerto Rumano', muscleGroup: 'Espalda' },
-  { name: 'Pullover con Mancuerna', muscleGroup: 'Espalda' },
-  // Hombros
-  { name: 'Press Militar', muscleGroup: 'Hombros' },
-  { name: 'Press Arnold', muscleGroup: 'Hombros' },
-  { name: 'Elevaciones Laterales', muscleGroup: 'Hombros' },
-  { name: 'Elevaciones Frontales', muscleGroup: 'Hombros' },
-  { name: 'Pájaros', muscleGroup: 'Hombros' },
-  { name: 'Face Pull', muscleGroup: 'Hombros' },
-  // Bíceps
-  { name: 'Curl con Barra', muscleGroup: 'Bíceps' },
-  { name: 'Curl con Mancuernas', muscleGroup: 'Bíceps' },
-  { name: 'Curl Martillo', muscleGroup: 'Bíceps' },
-  { name: 'Curl en Predicador', muscleGroup: 'Bíceps' },
-  { name: 'Curl en Polea', muscleGroup: 'Bíceps' },
-  // Tríceps
-  { name: 'Press Cerrado', muscleGroup: 'Tríceps' },
-  { name: 'Extensión en Polea Alta', muscleGroup: 'Tríceps' },
-  { name: 'Extensión Francesa', muscleGroup: 'Tríceps' },
-  { name: 'Fondos entre Bancos', muscleGroup: 'Tríceps' },
-  { name: 'Patada de Tríceps', muscleGroup: 'Tríceps' },
-  // Piernas
-  { name: 'Sentadilla', muscleGroup: 'Cuádriceps' },
-  { name: 'Sentadilla Frontal', muscleGroup: 'Cuádriceps' },
-  { name: 'Prensa de Piernas', muscleGroup: 'Cuádriceps' },
-  { name: 'Extensión de Cuádriceps', muscleGroup: 'Cuádriceps' },
-  { name: 'Zancadas', muscleGroup: 'Cuádriceps' },
-  { name: 'Curl Femoral', muscleGroup: 'Isquiotibiales' },
-  { name: 'Buenos Días', muscleGroup: 'Isquiotibiales' },
-  { name: 'Hip Thrust', muscleGroup: 'Glúteos' },
-  { name: 'Elevación de Pantorrillas', muscleGroup: 'Pantorrillas' },
-  // Core
-  { name: 'Plancha', muscleGroup: 'Core' },
-  { name: 'Crunch en Polea', muscleGroup: 'Core' },
-  { name: 'Rueda Abdominal', muscleGroup: 'Core' },
-]
+export const CATALOG_REVISION = '7455efae41b330c265e7cd4b78dfa848e7ce5ebd'
 
-export async function seedIfEmpty() {
-  const count = await db.exercises.count()
-  if (count > 0) return
-  await db.exercises.bulkAdd(EXERCISES)
+export async function importCatalog(records, database = db) {
+  if (!Array.isArray(records) || !records.length) throw new Error('El catálogo está vacío')
+  const ids = new Set()
+  for (const record of records) {
+    if (!record.catalogId || !record.name || !record.target || !record.instructionSteps?.length || ids.has(record.catalogId)) {
+      throw new Error(`Registro inválido: ${record.catalogId ?? '?'}`)
+    }
+    ids.add(record.catalogId)
+  }
+  await database.transaction('rw', database.exercises, database.metadata, async () => {
+    const existing = await database.exercises.toArray()
+    const catalogMap = new Map(existing.filter((e) => e.catalogId).map((e) => [e.catalogId, e]))
+    const legacyMap = new Map(existing.filter((e) => !e.catalogId && LEGACY_CATALOG_IDS[e.name])
+      .map((e) => [LEGACY_CATALOG_IDS[e.name], e]))
+    const additions = []
+    const updates = []
+    for (const record of records) {
+      const saved = catalogMap.get(record.catalogId) ?? legacyMap.get(record.catalogId)
+      const details = { ...record, catalogName: record.name, muscleGroup: muscleLabel(record.target),
+        aliases: [...new Set([...aliasesFor(record.catalogId), ...(saved?.aliases ?? [])])] }
+      if (saved) {
+        // User-visible names, groups, photos and hidden state remain intact.
+        updates.push({ ...saved, ...details, name: saved.name,
+          muscleGroup: saved.muscleGroup ?? details.muscleGroup })
+      } else additions.push(details)
+    }
+    await database.exercises.bulkAdd(additions)
+    await database.exercises.bulkPut(updates)
+    await database.metadata.put({ key: 'catalog', revision: CATALOG_REVISION, count: records.length })
+  })
+}
+
+export async function initializeCatalog() {
+  await db.open()
+  const imported = await db.metadata.get('catalog')
+  if (imported?.revision === CATALOG_REVISION) return
+  const response = await fetch('/catalog/exercises.json')
+  if (!response.ok) throw new Error('No se pudo cargar el catálogo. Volvé a intentar.')
+  await importCatalog(await response.json())
 }

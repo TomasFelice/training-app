@@ -10,6 +10,44 @@ db.version(1).stores({
   workout_sets: '++id, workoutId, exerciseId, setOrder',
 })
 
+// Catalog identities never replace local numeric IDs or historical references.
+db.version(3).stores({
+  exercises: '++id, name, muscleGroup, &catalogId, equipment, target',
+  routines: '++id, name',
+  workouts: '++id, routineId, date, &sessionId',
+  workout_sets: '++id, workoutId, exerciseId, setOrder',
+  metadata: '&key',
+})
+
+export async function archiveExercise(id) {
+  // Even an unreferenced custom exercise can belong to a not-yet-saved active session.
+  // Hiding always remains reversible and never invalidates those references.
+  await db.exercises.update(id, { archived: true })
+}
+
+/** Atomic and idempotent: a failed write leaves both the history and active draft intact. */
+export async function saveWorkoutSession(activeWorkout, sets, now = Date.now()) {
+  if (!activeWorkout?.sessionId) throw new Error('No hay un entrenamiento activo')
+  return db.transaction('rw', db.workouts, db.workout_sets, async () => {
+    const existing = await db.workouts.where('sessionId').equals(activeWorkout.sessionId).first()
+    if (existing) return existing.id
+    const orderedIds = activeWorkout.exerciseIds ?? Object.keys(sets).map(Number)
+    const completed = orderedIds.flatMap((exerciseId) => (sets[exerciseId] ?? [])
+      .filter((s) => s.done).map((s) => ({ ...s, exerciseId })))
+    const workoutId = await db.workouts.add({
+      sessionId: activeWorkout.sessionId, routineId: activeWorkout.routineId ?? null,
+      name: activeWorkout.name, dayName: activeWorkout.dayName,
+      date: new Date(now).toISOString(), duration: Math.max(0, Math.floor((now - activeWorkout.startTime) / 1000)),
+      totalVolume: completed.reduce((total, s) => total + (s.weight ?? 0) * (s.reps ?? 0), 0),
+    })
+    await db.workout_sets.bulkAdd(completed.map((s, setOrder) => ({
+      workoutId, exerciseId: s.exerciseId, weight: s.weight ?? 0, reps: s.reps ?? 0,
+      rpe: s.rpe ?? null, setOrder,
+    })))
+    return workoutId
+  })
+}
+
 // Version 2 — new routine format: scheduledDays + trainingDays; exercises get optional photo
 db.version(2).stores({
   exercises: '++id, name, muscleGroup',

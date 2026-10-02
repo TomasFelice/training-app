@@ -29,7 +29,7 @@ for (const size of [192, 512]) {
   const inner = size - pad * 2
   await sharp(svg)
     .resize(inner, inner)
-    .extend({ top: pad, bottom: pad, left: pad, right: pad, background: '#000000' })
+    .extend({ top: pad, bottom: pad, left: pad, right: pad, background: '#14181B' })
     .png()
     .toFile(join(outDir, `icon-${size}-maskable.png`))
 }

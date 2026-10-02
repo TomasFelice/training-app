@@ -4,7 +4,7 @@ import {
   Sparkles, Send, ChevronRight,
   CheckCircle, AlertCircle, Dumbbell, RotateCcw, X,
 } from 'lucide-react'
-import { sendMessage, parseRoutineFromResponse, saveRoutineFromAI, hasApiKey } from '../lib/gemini'
+import { sendMessage, parseRoutineFromResponse, saveRoutineFromAI, hasApiKey, GEMINI_MODEL_LABEL } from '../lib/gemini'
 import { useUIStore } from '../store'
 
 const SUGGESTIONS = [
@@ -121,7 +121,7 @@ export default function AIPage() {
 
     try {
       const reply = await sendMessage([...messages, userMsg])
-      setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: reply }])
+      setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', ...reply }])
     } catch (err) {
       setMessages((prev) => prev.slice(0, -1))
       setError(err.message)
@@ -147,7 +147,7 @@ export default function AIPage() {
       {/* Header */}
       <div className="px-5 pb-3 flex-shrink-0">
         <h1 className="text-white text-2xl font-bold tracking-tight">IA Coach</h1>
-        <p className="text-[var(--muted)] text-xs mt-0.5">Powered by Gemini</p>
+        <p className="text-[var(--muted)] text-xs mt-0.5">{GEMINI_MODEL_LABEL} · Razonamiento alto</p>
       </div>
 
       {/* Messages */}

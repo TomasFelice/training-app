@@ -11,7 +11,11 @@ npm run dev
 
 Los ejercicios y medios procesados están incluidos en `public/catalog`: el desarrollo y el build no dependen de descargar el repositorio de origen ni de ejecutar FFmpeg.
 
-Para habilitar el coach, copiá `.env.example` a `.env` y configurá `VITE_GEMINI_API_KEY`. La app usa una integración directa con Gemini: esa clave es visible en el cliente. La interfaz de entrenamiento, rutinas y progreso funciona sin el coach.
+Para habilitar el coach, copiá `.env.example` a `.env` y configurá `VITE_GEMINI_API_KEY`. El modelo predeterminado es `gemini-3.8-flash`, con razonamiento alto, temperatura 1 y un límite de 32.768 tokens que incluye razonamiento y respuesta. `VITE_GEMINI_MODEL` permite configurar otro modelo compatible con Gemini 3. Las respuestas mantienen las firmas de razonamiento entre turnos y las instrucciones del coach se envían como instrucciones de sistema.
+
+Gemini 3.8 Flash dispone de cuota gratuita de la API, sujeta a los límites del proyecto en [Google AI Studio](https://aistudio.google.com/usage). [Google AI Pro](https://support.google.com/googleone/answer/14534406) ofrece beneficios en los productos de Google; la [facturación de la API](https://ai.google.dev/gemini-api/docs/pricing) se gestiona por separado. Un proyecto con facturación habilitada paga por uso; elegir un modelo con cuota gratuita no fuerza que las llamadas sean gratis. Esta app no habilita facturación ni cambia de modelo automáticamente si se agota la cuota.
+
+La app usa una integración directa con Gemini: la clave de `.env` es visible en el cliente. `.env.example` es una plantilla sin credenciales y `.env` está ignorado por Git. La interfaz de entrenamiento, rutinas y progreso funciona sin el coach. Después de cambiar `.env`, reiniciá el servidor de desarrollo; para una instalación publicada, generá un build nuevo.
 
 ## Qué incluye
 

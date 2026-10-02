@@ -1,10 +1,12 @@
 import { db, getAIContext } from '../db'
 import { normalizeSearch } from './catalog'
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY?.trim()
+export const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL?.trim() || 'gemini-3.8-flash'
+export const GEMINI_MODEL_LABEL = GEMINI_MODEL === 'gemini-3.8-flash' ? 'Gemini 3.8 Flash' : GEMINI_MODEL
 
 const GEMINI_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`
+  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`
 
 export function hasApiKey() {
   return Boolean(API_KEY)
@@ -89,31 +91,46 @@ export async function sendMessage(messages) {
 
   const systemWithContext = `${SYSTEM_PROMPT}\n\n${context}`
 
-  const contents = [
-    { role: 'user', parts: [{ text: systemWithContext }] },
-    { role: 'model', parts: [{ text: 'Perfecto, estoy listo para ayudarte con tu entrenamiento.' }] },
-    ...messages.map((m) => ({
-      role: m.role === 'user' ? 'user' : 'model',
-      parts: [{ text: m.content }],
-    })),
-  ]
+  const contents = messages.map((m) => ({
+    role: m.role === 'user' ? 'user' : 'model',
+    // Keep model parts intact to preserve thinking signatures across turns.
+    parts: m.role === 'user' ? [{ text: m.content }] : (m.parts ?? [{ text: m.content }]),
+  }))
 
   const res = await fetch(GEMINI_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY },
     body: JSON.stringify({
       contents,
-      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+      systemInstruction: { parts: [{ text: systemWithContext }] },
+      generationConfig: {
+        temperature: 1,
+        // The limit includes thinking tokens as well as the final answer.
+        maxOutputTokens: 32768,
+        thinkingConfig: { thinkingLevel: 'high', includeThoughts: false },
+      },
     }),
   })
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
+    if (res.status === 429) throw new Error('Se alcanzó la cuota de Gemini para este proyecto. Volvé a intentar más tarde o revisá los límites en Google AI Studio. Google AI Pro tiene límites separados de la API.')
+    if (res.status === 401 || res.status === 403 || err?.error?.message?.includes('API key not valid')) {
+      throw new Error('La clave de Gemini no es válida o no tiene acceso. Revisá VITE_GEMINI_API_KEY en .env y los permisos del proyecto en Google AI Studio.')
+    }
+    if (res.status === 404) throw new Error(`El modelo ${GEMINI_MODEL} no está disponible para este proyecto. Revisá VITE_GEMINI_MODEL en .env.`)
     throw new Error(err?.error?.message ?? `Error ${res.status}`)
   }
 
   const data = await res.json()
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  const candidate = data.candidates?.[0]
+  if (candidate?.finishReason === 'MAX_TOKENS') {
+    throw new Error('Gemini no pudo completar la respuesta dentro del límite. Probá pedir una rutina o un análisis más breve.')
+  }
+  const parts = candidate?.content?.parts ?? []
+  const content = parts.filter((part) => !part.thought && typeof part.text === 'string').map((part) => part.text).join('').trim()
+  if (!content) throw new Error('Gemini no devolvió una respuesta. Probá reformular la consulta.')
+  return { content, parts }
 }
 
 // ── Parse routine JSON from AI response ──────────────────────────────────

@@ -25,7 +25,7 @@ const userMessage = { role: 'user', content: 'Generá una rutina' }
 const response = (data, status = 200) => ({ ok: status === 200, status, json: async () => data })
 
 describe('Gemini coach integration', () => {
-  it('uses Flash 3.8 with high reasoning and native system instructions, joins response parts and preserves signatures', async () => {
+  it('uses Flash 3.8 with medium reasoning and native system instructions, joins response parts and preserves signatures', async () => {
     const parts = [
       { text: 'Resumen interno', thought: true, thoughtSignature: 'signature-thought' },
       { text: 'Tu rutina. ', thoughtSignature: 'signature-answer' },
@@ -44,7 +44,7 @@ describe('Gemini coach integration', () => {
     expect(body.systemInstruction.parts[0].text).toContain('CONTEXTO DE ENTRENAMIENTO')
     expect(body.contents).toEqual([{ role: 'user', parts: [{ text: userMessage.content }] }])
     expect(body.generationConfig).toMatchObject({ temperature: 1, maxOutputTokens: 32768,
-      thinkingConfig: { thinkingLevel: 'high', includeThoughts: false } })
+      thinkingConfig: { thinkingLevel: 'medium', includeThoughts: false } })
 
     await gemini.sendMessage([userMessage, { role: 'assistant', ...reply }, { role: 'user', content: 'Ajustala a 4 días' }])
     expect(JSON.parse(fetchGemini.mock.calls[1][1].body).contents[1]).toEqual({ role: 'model', parts })

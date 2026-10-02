@@ -107,7 +107,7 @@ export async function sendMessage(messages) {
         temperature: 1,
         // The limit includes thinking tokens as well as the final answer.
         maxOutputTokens: 32768,
-        thinkingConfig: { thinkingLevel: 'high', includeThoughts: false },
+        thinkingConfig: { thinkingLevel: 'medium', includeThoughts: false },
       },
     }),
   })

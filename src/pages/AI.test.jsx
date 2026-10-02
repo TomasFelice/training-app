@@ -23,7 +23,7 @@ afterAll(() => {
 it('displays the selected model and renders the reply from the reasoning model', async () => {
   const user = userEvent.setup()
   render(<AIPage />)
-  expect(screen.getByText('Gemini 3.8 Flash · Razonamiento alto')).toBeInTheDocument()
+  expect(screen.getByText('Gemini 3.8 Flash · Razonamiento medio')).toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: /Analizá mi progreso/ }))
   expect(await screen.findByText('Seguís progresando en tus ejercicios.')).toBeInTheDocument()
   await user.type(screen.getByPlaceholderText('Preguntá algo…'), '¿Y el pecho?{Enter}')

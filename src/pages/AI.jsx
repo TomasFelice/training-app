@@ -147,7 +147,7 @@ export default function AIPage() {
       {/* Header */}
       <div className="px-5 pb-3 flex-shrink-0">
         <h1 className="text-white text-2xl font-bold tracking-tight">IA Coach</h1>
-        <p className="text-[var(--muted)] text-xs mt-0.5">{GEMINI_MODEL_LABEL} · Razonamiento alto</p>
+        <p className="text-[var(--muted)] text-xs mt-0.5">{GEMINI_MODEL_LABEL} · Razonamiento medio</p>
       </div>
 
       {/* Messages */}
